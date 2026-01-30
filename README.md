@@ -270,7 +270,35 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-#### Step 4: Cloudflare Tunnel
+#### Step 4: Test di Localhost
+
+Karena semua site di port 80, gunakan **Host header** untuk test:
+
+```bash
+# Test pomodoro
+curl -H "Host: pomodoro.yourdomain.store" http://localhost
+
+# Test site utama
+curl -H "Host: yourdomain.store" http://localhost
+```
+
+**Atau test via browser** — edit `/etc/hosts`:
+
+```bash
+sudo nano /etc/hosts
+```
+
+Tambahkan:
+```
+127.0.0.1   pomodoro.yourdomain.store
+127.0.0.1   yourdomain.store
+```
+
+Lalu buka di browser: `http://pomodoro.yourdomain.store`
+
+> **Note:** Hapus entry di `/etc/hosts` setelah selesai test, agar tidak conflict dengan DNS asli.
+
+#### Step 5: Cloudflare Tunnel
 
 Kedua hostname tetap arahkan ke **port 80**:
 
