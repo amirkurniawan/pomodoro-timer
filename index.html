@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pomodoro Timer 🍅</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'pomodoro': '#e74c3c',
+                        'short-break': '#27ae60',
+                        'long-break': '#3498db',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        .timer-ring {
+            transform: rotate(-90deg);
+        }
+        
+        .timer-ring circle {
+            transition: stroke-dashoffset 1s linear;
+        }
+    </style>
+</head>
+<body class="min-h-screen transition-colors duration-500" 
+      :class="{
+          'bg-pomodoro': mode === 'work',
+          'bg-short-break': mode === 'shortBreak',
+          'bg-long-break': mode === 'longBreak'
+      }"
+      x-data="pomodoroTimer()" 
+      x-cloak>
+    
+    <div class="container mx-auto px-4 py-8 max-w-md">
+        
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-white mb-2">🍅 Pomodoro Timer</h1>
+            <p class="text-white/70 text-sm">Stay focused, be productive</p>
+        </header>
+        
+        <!-- Mode Tabs -->
+        <div class="flex justify-center gap-2 mb-8">
+            <button @click="setMode('work')" 
+                    class="px-4 py-2 rounded-lg font-medium transition-all text-sm"
+                    :class="mode === 'work' ? 'bg-white/30 text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'">
+                Pomodoro
+            </button>
+            <button @click="setMode('shortBreak')" 
+                    class="px-4 py-2 rounded-lg font-medium transition-all text-sm"
+                    :class="mode === 'shortBreak' ? 'bg-white/30 text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'">
+                Short Break
+            </button>
+            <button @click="setMode('longBreak')" 
+                    class="px-4 py-2 rounded-lg font-medium transition-all text-sm"
+                    :class="mode === 'longBreak' ? 'bg-white/30 text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'">
+                Long Break
+            </button>
+        </div>
+        
+        <!-- Timer Display -->
+        <div class="bg-white/20 backdrop-blur-sm rounded-3xl p-8 mb-6 shadow-xl">
+            
+            <!-- Circular Progress -->
+            <div class="relative w-64 h-64 mx-auto mb-6">
+                <svg class="timer-ring w-full h-full" viewBox="0 0 200 200">
+                    <!-- Background Circle -->
+                    <circle cx="100" cy="100" r="90" 
+                            fill="none" 
+                            stroke="rgba(255,255,255,0.2)" 
+                            stroke-width="8"/>
+                    <!-- Progress Circle -->
+                    <circle cx="100" cy="100" r="90" 
+                            fill="none" 
+                            stroke="white" 
+                            stroke-width="8"
+                            stroke-linecap="round"
+                            :stroke-dasharray="circumference"
+                            :stroke-dashoffset="progressOffset"/>
+                </svg>
+                
+                <!-- Time Display -->
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span class="text-6xl font-bold text-white tracking-wider" x-text="formattedTime"></span>
+                    <span class="text-white/70 text-sm uppercase mt-2" x-text="modeLabel"></span>
+                </div>
+            </div>
+            
+            <!-- Control Buttons -->
+            <div class="flex justify-center gap-4">
+                <!-- Start/Pause Button -->
+                <button @click="toggleTimer()" 
+                        class="w-32 py-4 rounded-xl font-bold text-lg uppercase tracking-wide transition-all transform hover:scale-105 active:scale-95"
+                        :class="{
+                            'bg-white text-pomodoro': mode === 'work',
+                            'bg-white text-short-break': mode === 'shortBreak',
+                            'bg-white text-long-break': mode === 'longBreak'
+                        }">
+                    <span x-text="isRunning ? 'Pause' : 'Start'"></span>
+                </button>
+                
+                <!-- Reset Button -->
+                <button @click="resetTimer()" 
+                        class="w-16 py-4 rounded-xl bg-white/20 text-white hover:bg-white/30 transition-all"
+                        title="Reset Timer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Session Counter -->
+        <div class="text-center mb-6">
+            <p class="text-white/70 text-sm mb-2">Sessions Completed</p>
+            <div class="flex justify-center gap-2">
+                <template x-for="i in 4" :key="i">
+                    <div class="w-4 h-4 rounded-full transition-all"
+                         :class="i <= sessionsCompleted % 4 || (sessionsCompleted > 0 && sessionsCompleted % 4 === 0 && i === 4) ? 'bg-white' : 'bg-white/30'">
+                    </div>
+                </template>
+            </div>
+            <p class="text-white font-bold mt-2">#<span x-text="sessionsCompleted"></span></p>
+        </div>
+        
+        <!-- Settings Toggle -->
+        <div class="text-center">
+            <button @click="showSettings = !showSettings" 
+                    class="text-white/70 hover:text-white transition-colors inline-flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Settings</span>
+            </button>
+        </div>
+        
+        <!-- Settings Panel -->
+        <div x-show="showSettings" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-y-4"
+             x-transition:enter-end="opacity-100 transform translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 transform translate-y-0"
+             x-transition:leave-end="opacity-0 transform translate-y-4"
+             class="mt-6 bg-white/20 backdrop-blur-sm rounded-2xl p-6">
+            
+            <h3 class="text-white font-bold text-lg mb-4 text-center">⚙️ Timer Settings</h3>
+            
+            <div class="space-y-4">
+                <!-- Pomodoro Duration -->
+                <div class="flex items-center justify-between">
+                    <label class="text-white/90">Pomodoro</label>
+                    <div class="flex items-center gap-2">
+                        <button @click="settings.work = Math.max(1, settings.work - 1); updateDuration()" 
+                                class="w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30">-</button>
+                        <span class="w-12 text-center text-white font-bold" x-text="settings.work + ' min'"></span>
+                        <button @click="settings.work = Math.min(60, settings.work + 1); updateDuration()" 
+                                class="w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30">+</button>
+                    </div>
+                </div>
+                
+                <!-- Short Break Duration -->
+                <div class="flex items-center justify-between">
+                    <label class="text-white/90">Short Break</label>
+                    <div class="flex items-center gap-2">
+                        <button @click="settings.shortBreak = Math.max(1, settings.shortBreak - 1); updateDuration()" 
+                                class="w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30">-</button>
+                        <span class="w-12 text-center text-white font-bold" x-text="settings.shortBreak + ' min'"></span>
+                        <button @click="settings.shortBreak = Math.min(30, settings.shortBreak + 1); updateDuration()" 
+                                class="w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30">+</button>
+                    </div>
+                </div>
+                
+                <!-- Long Break Duration -->
+                <div class="flex items-center justify-between">
+                    <label class="text-white/90">Long Break</label>
+                    <div class="flex items-center gap-2">
+                        <button @click="settings.longBreak = Math.max(1, settings.longBreak - 1); updateDuration()" 
+                                class="w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30">-</button>
+                        <span class="w-12 text-center text-white font-bold" x-text="settings.longBreak + ' min'"></span>
+                        <button @click="settings.longBreak = Math.min(60, settings.longBreak + 1); updateDuration()" 
+                                class="w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30">+</button>
+                    </div>
+                </div>
+                
+                <!-- Sound Toggle -->
+                <div class="flex items-center justify-between pt-2 border-t border-white/20">
+                    <label class="text-white/90">Sound Notification</label>
+                    <button @click="settings.soundEnabled = !settings.soundEnabled" 
+                            class="w-12 h-6 rounded-full transition-colors relative"
+                            :class="settings.soundEnabled ? 'bg-white' : 'bg-white/30'">
+                        <div class="w-5 h-5 rounded-full bg-white shadow absolute top-0.5 transition-transform"
+                             :class="settings.soundEnabled ? 'translate-x-6 bg-green-500' : 'translate-x-0.5 bg-gray-400'"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <footer class="text-center mt-8 text-white/50 text-sm">
+            <p>Built with Alpine.js & Tailwind CSS</p>
+            <p class="mt-1">
+                <a href="https://github.com/amirkurniawan/devops-labs" target="_blank" class="hover:text-white transition-colors">
+                    github.com/amirkurniawan
+                </a>
+            </p>
+        </footer>
+    </div>
+    
+    <!-- Audio Element for Notification -->
+    <audio id="alarmSound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+    </audio>
+    
+    <script>
+        function pomodoroTimer() {
+            return {
+                // State
+                mode: 'work', // work, shortBreak, longBreak
+                timeLeft: 25 * 60, // in seconds
+                totalTime: 25 * 60,
+                isRunning: false,
+                interval: null,
+                sessionsCompleted: 0,
+                showSettings: false,
+                
+                // Settings
+                settings: {
+                    work: 25,
+                    shortBreak: 5,
+                    longBreak: 15,
+                    soundEnabled: true
+                },
+                
+                // Computed
+                get circumference() {
+                    return 2 * Math.PI * 90; // radius = 90
+                },
+                
+                get progressOffset() {
+                    const progress = this.timeLeft / this.totalTime;
+                    return this.circumference * (1 - progress);
+                },
+                
+                get formattedTime() {
+                    const minutes = Math.floor(this.timeLeft / 60);
+                    const seconds = this.timeLeft % 60;
+                    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                },
+                
+                get modeLabel() {
+                    const labels = {
+                        work: 'Focus Time',
+                        shortBreak: 'Short Break',
+                        longBreak: 'Long Break'
+                    };
+                    return labels[this.mode];
+                },
+                
+                // Methods
+                init() {
+                    // Load settings from localStorage
+                    const saved = localStorage.getItem('pomodoroSettings');
+                    if (saved) {
+                        this.settings = { ...this.settings, ...JSON.parse(saved) };
+                    }
+                    
+                    const savedSessions = localStorage.getItem('pomodoroSessions');
+                    if (savedSessions) {
+                        this.sessionsCompleted = parseInt(savedSessions);
+                    }
+                    
+                    this.updateDuration();
+                    
+                    // Update page title
+                    this.$watch('timeLeft', () => {
+                        document.title = `${this.formattedTime} - ${this.modeLabel} | Pomodoro`;
+                    });
+                },
+                
+                setMode(newMode) {
+                    if (this.isRunning) {
+                        this.pauseTimer();
+                    }
+                    this.mode = newMode;
+                    this.updateDuration();
+                },
+                
+                updateDuration() {
+                    const durations = {
+                        work: this.settings.work * 60,
+                        shortBreak: this.settings.shortBreak * 60,
+                        longBreak: this.settings.longBreak * 60
+                    };
+                    this.totalTime = durations[this.mode];
+                    this.timeLeft = durations[this.mode];
+                    
+                    // Save settings
+                    localStorage.setItem('pomodoroSettings', JSON.stringify(this.settings));
+                },
+                
+                toggleTimer() {
+                    if (this.isRunning) {
+                        this.pauseTimer();
+                    } else {
+                        this.startTimer();
+                    }
+                },
+                
+                startTimer() {
+                    this.isRunning = true;
+                    this.interval = setInterval(() => {
+                        if (this.timeLeft > 0) {
+                            this.timeLeft--;
+                        } else {
+                            this.timerComplete();
+                        }
+                    }, 1000);
+                },
+                
+                pauseTimer() {
+                    this.isRunning = false;
+                    clearInterval(this.interval);
+                },
+                
+                resetTimer() {
+                    this.pauseTimer();
+                    this.updateDuration();
+                },
+                
+                timerComplete() {
+                    this.pauseTimer();
+                    
+                    // Play sound
+                    if (this.settings.soundEnabled) {
+                        this.playSound();
+                    }
+                    
+                    // Show notification
+                    this.showNotification();
+                    
+                    // Auto switch mode
+                    if (this.mode === 'work') {
+                        this.sessionsCompleted++;
+                        localStorage.setItem('pomodoroSessions', this.sessionsCompleted);
+                        
+                        // After 4 work sessions, take a long break
+                        if (this.sessionsCompleted % 4 === 0) {
+                            this.setMode('longBreak');
+                        } else {
+                            this.setMode('shortBreak');
+                        }
+                    } else {
+                        this.setMode('work');
+                    }
+                },
+                
+                playSound() {
+                    const audio = document.getElementById('alarmSound');
+                    audio.currentTime = 0;
+                    audio.play().catch(e => console.log('Audio play failed:', e));
+                },
+                
+                showNotification() {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('Pomodoro Timer', {
+                            body: this.mode === 'work' ? 'Time for a break! 🎉' : 'Back to work! 💪',
+                            icon: '🍅'
+                        });
+                    }
+                },
+                
+                // Request notification permission on first interaction
+                requestNotificationPermission() {
+                    if ('Notification' in window && Notification.permission === 'default') {
+                        Notification.requestPermission();
+                    }
+                }
+            }
+        }
+        
+        // Request notification permission when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            if ('Notification' in window && Notification.permission === 'default') {
+                // Will be requested on first user interaction
+            }
+        });
+    </script>
+</body>
+</html>
